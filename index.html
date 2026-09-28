@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importance-Aware OBS Pruning for Diffusion Models</title>
+  <meta name="description" content="A training-free framework that injects spatial importance signals (CFG, edges, detectors) into OBS pruning, preserving subject fidelity in compressed text-to-image diffusion models.">
+
+  <!-- Social previews -->
+  <meta property="og:title" content="Importance-Aware OBS Pruning for Diffusion Models">
+  <meta property="og:description" content="Prune what doesn't matter: importance-guided, training-free pruning for diffusion models.">
+  <meta property="og:url" content="https://sasukepn1999.github.io/importance-obs-pruning/">
+  <meta property="og:image" content="https://sasukepn1999.github.io/importance-obs-pruning/static/images/teaser/ours_40.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="static/css/style.css">
+
+  <script>
+    window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script defer src="static/js/main.js"></script>
+</head>
+<body>
+
+<!-- ============================ HERO ============================ -->
+<section class="hero hero-fancy">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+
+          <p class="venue-pill">NeurIPS 2026</p>
+
+          <h1 class="title publication-title-fancy">
+            <span class="highlight-green">Importance-Aware</span><br>
+            <span class="abbr-highlight">OBS</span> Pruning for Diffusion Models
+          </h1>
+
+          <div class="authors-fancy">
+            <span class="author-block"><a class="author-link" href="https://sasukepn1999.github.io/" target="_blank" rel="noopener">Ba-Thinh Lam</a>,</span>
+            <span class="author-block"><a class="author-link" href="https://srijandas07.github.io/" target="_blank" rel="noopener">Srijan Das</a>,</span>
+            <span class="author-block"><a class="author-link" href="https://hieulem.github.io/" target="_blank" rel="noopener">Hieu Le</a></span>
+          </div>
+
+          <div class="affiliations-fancy">
+            <span class="aff-item"><a class="aff-link" href="https://charlottevisionlab.github.io/" target="_blank" rel="noopener">Charlotte Vision Lab</a>, University of North Carolina at Charlotte</span>
+          </div>
+
+          <div class="btn-fancy-container">
+            <a href="https://arxiv.org/pdf/2607.20048" class="btn-fancy" target="_blank" rel="noopener">
+              <span class="icon"><i class="fas fa-file-pdf"></i></span><span>Paper</span>
+            </a>
+            <a href="https://arxiv.org/abs/2607.20048" class="btn-fancy" target="_blank" rel="noopener">
+              <span class="icon"><i class="ai ai-arxiv"></i></span><span>arXiv</span>
+            </a>
+            <a href="#" class="btn-fancy" target="_blank" rel="noopener">
+              <span class="icon"><i class="fab fa-github"></i></span><span>Code</span>
+            </a>
+            <a href="#BibTeX" class="btn-fancy">
+              <span class="icon"><i class="fas fa-quote-right"></i></span><span>BibTeX</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Auto-scrolling OBS-Diff vs. Ours pairs (filled by main.js) -->
+    <div class="hero-teaser-marquee" aria-hidden="true">
+      <div class="hero-teaser-track" id="marqueeTrack"></div>
+    </div>
+    <p class="marquee-caption">Each pair: <b>OBS-Diff</b> (left) vs. <b class="accent">Ours</b> (right) at the same sparsity. Hover to pause.</p>
+  </div>
+</section>
+
+<!-- ============================ KEY IDEA ============================ -->
+<section class="section band band-tint">
+  <div class="container is-max-widescreen">
+    <h2 class="title is-3 has-text-centered">Not Every Pixel Matters Equally</h2>
+    <p class="idea-lead">
+      OBS-style pruning such as OBS-Diff minimizes the <em>average</em> reconstruction error, so an error on the
+      subject costs the same as an error on the background. At high sparsity, the subject is what breaks.
+      We weight that error with a spatial importance map.
+    </p>
+
+    <div class="versus">
+      <!-- Left: uniform objective -->
+      <div class="vs-side vs-base">
+        <p class="vs-tag">OBS-Diff &middot; uniform objective</p>
+        <p class="vs-eq">$\|\hat W X - W X\|_2^2$</p>
+        <div class="vs-imgs">
+          <figure><img src="static/images/teaser/obs_30.jpg" alt="OBS-Diff 30%"><figcaption>30% sparse</figcaption></figure>
+          <figure><img src="static/images/teaser/obs_40.jpg" alt="OBS-Diff 40%"><figcaption>40% sparse</figcaption></figure>
+        </div>
+        <p class="vs-note"><i class="fas fa-circle-xmark"></i> Motorcycle loses its shape</p>
+      </div>
+
+      <!-- Center: shared dense model + importance map -->
+      <div class="vs-center">
+        <figure><img src="static/images/teaser/dense.jpg" alt="Dense output"><figcaption>Dense model</figcaption></figure>
+        <div class="vs-arrow"><i class="fas fa-arrow-down"></i></div>
+        <figure><img src="static/images/teaser/cfg_mask.jpg" alt="CFG importance map" class="pixelated"><figcaption>Importance map $A$ (CFG)</figcaption></figure>
+      </div>
+
+      <!-- Right: importance-weighted objective -->
+      <div class="vs-side vs-ours">
+        <p class="vs-tag">Ours &middot; importance-aware objective</p>
+        <p class="vs-eq">$\|A \odot (\hat W X - W X)\|_2^2$</p>
+        <div class="vs-imgs">
+          <figure><img src="static/images/teaser/ours_30.jpg" alt="Ours 30%"><figcaption>30% sparse</figcaption></figure>
+          <figure><img src="static/images/teaser/ours_40.jpg" alt="Ours 40%"><figcaption>40% sparse</figcaption></figure>
+        </div>
+        <p class="vs-note"><i class="fas fa-circle-check"></i> Subject preserved (red boxes)</p>
+      </div>
+    </div>
+
+    <div class="idea-pills">
+      <span><i class="fas fa-bolt"></i> One-shot &amp; training-free</span>
+      <span><i class="fas fa-equals"></i> Same OBS pipeline &amp; cost</span>
+      <span><i class="fas fa-puzzle-piece"></i> Any spatial signal</span>
+    </div>
+    <p class="has-text-centered is-size-7 has-text-grey mt-3">
+      Structured pruning of PixArt-&Sigma;. Prompt: <i>"A black Honda motorcycle parked in front of a garage."</i>
+    </p>
+  </div>
+</section>
+
+<!-- ============================ ABSTRACT + METHOD ============================ -->
+<section class="section band band-white" id="method">
+  <div class="container is-max-widescreen">
+    <h2 class="title is-3 has-text-centered">Abstract</h2>
+    <div class="content has-text-justified">
+      <p>
+        We propose importance-aware pruning for diffusion models, a training-free framework that prioritizes
+        preserving parameters critical to semantically salient image regions. To do so, we incorporate spatial
+        importance maps, derived from conditioning signals or model attention, into the pruning objective.
+        This produces parameter rankings aligned with perceptual relevance rather than uniform reconstruction
+        error. On the MS-COCO dataset, our approach consistently retains subject fidelity and structural correctness
+        at high compression ratios where conventional pruning causes visible degradation. These results
+        show that content-aware objectives are key to perceptually faithful compression of generative models.
+      </p>
+    </div>
+
+    <h2 class="title is-3 has-text-centered method-title">Method: Importance-Aware Hessian</h2>
+    <div class="content has-text-justified method-intro">
+      <p>
+        OBS ranks each weight by its saliency $S_q = w_q^2 / 2[H^{-1}]_{qq}$, with the Hessian $H$ built from layer
+        activations. This score is already an approximation, so we <strong>correct it with information about what the
+        image should preserve</strong>: a spatial importance map re-weights the activations before the Hessian is
+        accumulated.
+      </p>
+    </div>
+
+    <div class="columns is-centered method-steps">
+      <div class="column is-4">
+        <div class="box-fancy step-card">
+          <span class="step-num">1</span>
+          <h3 class="title is-5">Compute an importance map</h3>
+          <p>Take the magnitude of the CFG response, averaged over channels and min-max normalized:</p>
+          <p class="eq">$$M_t = \big|\epsilon_\theta(x_t,t,y) - \epsilon_\theta(x_t,t,\varnothing)\big|$$</p>
+          <p class="eq">$$A_t=\lambda M_t$$</p>
+          <p class="is-size-7 has-text-grey">Canny edges or detector boxes can replace $M_t$.</p>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box-fancy step-card">
+          <span class="step-num">2</span>
+          <h3 class="title is-5">Weight the reconstruction error</h3>
+          <p>Errors in important regions count more:</p>
+          <p class="eq">$$\min_{\hat W}\sum_t \alpha_t\big\|A_t\odot(\hat W X_t - W X_t)\big\|_2^2$$</p>
+          <p class="is-size-7 has-text-grey">Linear layers act on channels, so $A_t$ commutes with $W$.</p>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box-fancy step-card">
+          <span class="step-num">3</span>
+          <h3 class="title is-5">Swap in the new Hessian</h3>
+          <p>With filtered activations $X'_t = A_t\odot X_t$:</p>
+          <p class="eq">$$H_{\text{imp}} = 2\sum_t \alpha_t\,\mathbb{E}\big[X'_t X_t'^{\top}\big]$$</p>
+          <p class="is-size-7 has-text-grey">The OBS closed-form weight update is unchanged.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================ PERFORMANCE ============================ -->
+<section class="section band band-gray" id="perf">
+  <div class="container is-max-widescreen">
+    <h2 class="title is-3 has-text-centered">Performance</h2>
+    <p class="has-text-centered has-text-grey mb-5">
+      Calibrated on 1,000 GCC3M prompts and evaluated on 1,000 MS-COCO 2017 prompts. The gap grows with sparsity.
+    </p>
+
+    <div class="tabs is-toggle is-fullwidth is-centered is-rounded perf-tabs">
+      <ul>
+        <li class="is-active" data-tab="sd3"><a><span>SD3-Medium</span></a></li>
+        <li data-tab="pix"><a><span>PixArt-&Sigma;</span></a></li>
+        <li data-tab="struct"><a><span>Structured</span></a></li>
+        <li data-tab="sig"><a><span>Other Signals</span></a></li>
+        <li data-tab="tgt"><a><span>Targeted</span></a></li>
+      </ul>
+    </div>
+
+    <!-- SD3 -->
+    <div id="sd3-content" class="tab-content">
+      <h4 class="title is-5 has-text-centered">Unstructured pruning on SD3-Medium</h4>
+      <div class="table-container">
+        <table class="fancy-table">
+          <thead><tr><th>Sparsity</th><th style="text-align:left;">Method</th><th>CLIP <span class="metric-label">(&uarr;)</span></th><th>ImageReward <span class="metric-label">(&uarr;)</span></th><th>MUSIQ <span class="metric-label">(&uarr;)</span></th></tr></thead>
+          <tbody>
+            <tr class="dense-row"><td>0%</td><td style="text-align:left;">Dense</td><td>32.26</td><td>0.98</td><td>72.68</td></tr>
+            <tr><td rowspan="2">30%</td><td style="text-align:left;">OBS-Diff</td><td class="best-val">32.25</td><td>0.96</td><td class="best-val">72.53</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td>32.24</td><td class="best-val">0.98</td><td>72.41</td></tr>
+            <tr><td rowspan="2">40%</td><td style="text-align:left;">OBS-Diff</td><td>32.30</td><td>0.92</td><td>71.02</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">32.35</td><td class="best-val">0.95</td><td class="best-val">71.48</td></tr>
+            <tr><td rowspan="2">45%</td><td style="text-align:left;">OBS-Diff</td><td>32.25</td><td>0.84</td><td>68.76</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">32.30</td><td class="best-val">0.87</td><td class="best-val">69.86</td></tr>
+            <tr><td rowspan="2">50%</td><td style="text-align:left;">OBS-Diff</td><td>32.16</td><td>0.71</td><td>65.98</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">32.20</td><td class="best-val">0.76</td><td class="best-val">66.30</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PixArt -->
+    <div id="pix-content" class="tab-content" style="display:none;">
+      <h4 class="title is-5 has-text-centered">Unstructured pruning on PixArt-&Sigma;</h4>
+      <div class="table-container">
+        <table class="fancy-table">
+          <thead><tr><th>Sparsity</th><th style="text-align:left;">Method</th><th>CLIP <span class="metric-label">(&uarr;)</span></th><th>ImageReward <span class="metric-label">(&uarr;)</span></th><th>MUSIQ <span class="metric-label">(&uarr;)</span></th></tr></thead>
+          <tbody>
+            <tr class="dense-row"><td>0%</td><td style="text-align:left;">Dense</td><td>31.86</td><td>0.94</td><td>71.11</td></tr>
+            <tr><td rowspan="2">45%</td><td style="text-align:left;">OBS-Diff</td><td>31.63</td><td>0.78</td><td>70.12</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">31.73</td><td class="best-val">0.85</td><td class="best-val">70.77</td></tr>
+            <tr><td rowspan="2">50%</td><td style="text-align:left;">OBS-Diff</td><td>31.62</td><td>0.76</td><td>70.07</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">31.71</td><td class="best-val">0.78</td><td class="best-val">70.34</td></tr>
+            <tr><td rowspan="2">55%</td><td style="text-align:left;">OBS-Diff</td><td>31.65</td><td>0.64</td><td>68.25</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">31.69</td><td class="best-val">0.70</td><td class="best-val">69.25</td></tr>
+            <tr><td rowspan="2">60%</td><td style="text-align:left;">OBS-Diff</td><td>31.44</td><td>0.49</td><td>65.24</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">31.54</td><td class="best-val">0.52</td><td class="best-val">67.13</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Structured -->
+    <div id="struct-content" class="tab-content" style="display:none;">
+      <h4 class="title is-5 has-text-centered">Structured pruning on PixArt-&Sigma;</h4>
+      <div class="table-container">
+        <table class="fancy-table">
+          <thead><tr><th>Sparsity</th><th style="text-align:left;">Method</th><th>CLIP <span class="metric-label">(&uarr;)</span></th><th>ImageReward <span class="metric-label">(&uarr;)</span></th><th>MUSIQ <span class="metric-label">(&uarr;)</span></th></tr></thead>
+          <tbody>
+            <tr class="dense-row"><td>0%</td><td style="text-align:left;">Dense</td><td>31.86</td><td>0.94</td><td>71.11</td></tr>
+            <tr><td rowspan="2">20%</td><td style="text-align:left;">OBS-Diff</td><td>31.65</td><td>0.74</td><td>69.57</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">31.68</td><td class="best-val">0.79</td><td class="best-val">71.37</td></tr>
+            <tr><td rowspan="2">30%</td><td style="text-align:left;">OBS-Diff</td><td class="best-val">31.36</td><td>0.38</td><td>66.98</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td>31.30</td><td class="best-val">0.54</td><td class="best-val">69.85</td></tr>
+            <tr><td rowspan="2">40%</td><td style="text-align:left;">OBS-Diff</td><td>30.84</td><td>&minus;0.04</td><td>65.17</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">31.08</td><td class="best-val">0.30</td><td class="best-val">68.64</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Other signals -->
+    <div id="sig-content" class="tab-content" style="display:none;">
+      <h4 class="title is-5 has-text-centered">Alternative importance signals on PixArt-&Sigma; (unstructured)</h4>
+      <div class="table-container">
+        <table class="fancy-table">
+          <thead><tr><th>Sparsity</th><th style="text-align:left;">Method</th><th>CLIP <span class="metric-label">(&uarr;)</span></th><th>ImageReward <span class="metric-label">(&uarr;)</span></th><th>MUSIQ <span class="metric-label">(&uarr;)</span></th></tr></thead>
+          <tbody>
+            <tr class="dense-row"><td>0%</td><td style="text-align:left;">Dense</td><td>31.86</td><td>0.94</td><td>71.11</td></tr>
+            <tr><td rowspan="4">45%</td><td style="text-align:left;">OBS-Diff</td><td>31.63</td><td>0.78</td><td>70.12</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td class="best-val">31.73</td><td class="best-val">0.85</td><td>70.77</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG + Det.)</td><td class="best-val">31.73</td><td>0.82</td><td class="best-val">70.87</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (Canny)</td><td class="best-val">31.73</td><td>0.82</td><td>70.81</td></tr>
+            <tr><td rowspan="4">50%</td><td style="text-align:left;">OBS-Diff</td><td>31.62</td><td>0.76</td><td>70.07</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td>31.71</td><td>0.78</td><td>70.34</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG + Det.)</td><td>31.71</td><td>0.78</td><td class="best-val">70.59</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (Canny)</td><td class="best-val">31.75</td><td class="best-val">0.81</td><td>70.34</td></tr>
+            <tr><td rowspan="4">55%</td><td style="text-align:left;">OBS-Diff</td><td>31.65</td><td>0.64</td><td>68.25</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td>31.69</td><td>0.70</td><td>69.25</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG + Det.)</td><td>31.79</td><td>0.75</td><td class="best-val">69.62</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (Canny)</td><td class="best-val">31.83</td><td class="best-val">0.76</td><td>69.12</td></tr>
+            <tr><td rowspan="4">60%</td><td style="text-align:left;">OBS-Diff</td><td>31.44</td><td>0.49</td><td>65.24</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG)</td><td>31.54</td><td>0.52</td><td>67.13</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (CFG + Det.)</td><td class="best-val">31.60</td><td>0.50</td><td class="best-val">67.27</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (Canny)</td><td>31.52</td><td class="best-val">0.53</td><td>65.91</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Category-targeted -->
+    <div id="tgt-content" class="tab-content" style="display:none;">
+      <h4 class="title is-5 has-text-centered">Category-targeted pruning on PixArt-&Sigma; (60% unstructured)</h4>
+      <p class="has-text-centered is-size-7 has-text-grey mb-3">
+        <i>General</i>: calibrated on the category-diverse GCC3M set. <i>Target</i>: calibrated only on prompts that contain the category.
+        All models are evaluated on the same category-specific test prompts.
+      </p>
+      <div class="table-container">
+        <table class="fancy-table">
+          <thead><tr><th>Category</th><th style="text-align:left;">Method</th><th>CLIP <span class="metric-label">(&uarr;)</span></th><th>ImageReward <span class="metric-label">(&uarr;)</span></th><th>MUSIQ <span class="metric-label">(&uarr;)</span></th></tr></thead>
+          <tbody>
+            <tr><td rowspan="4">Woman</td><td style="text-align:left;">OBS-Diff (general)</td><td>32.36</td><td>0.72</td><td>65.08</td></tr>
+            <tr><td style="text-align:left;">OBS-Diff (target)</td><td>32.25</td><td>0.75</td><td>65.75</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (general)</td><td>32.31</td><td>0.76</td><td>66.74</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (target)</td><td class="best-val">32.38</td><td class="best-val">0.85</td><td class="best-val">67.40</td></tr>
+            <tr><td rowspan="4">Cat</td><td style="text-align:left;">OBS-Diff (general)</td><td>32.58</td><td>0.28</td><td>64.35</td></tr>
+            <tr><td style="text-align:left;">OBS-Diff (target)</td><td>32.45</td><td>0.29</td><td>69.81</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (general)</td><td class="best-val">32.66</td><td class="best-val">0.41</td><td>69.52</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (target)</td><td>32.28</td><td>0.34</td><td class="best-val">71.64</td></tr>
+            <tr><td rowspan="4">Airplane</td><td style="text-align:left;">OBS-Diff (general)</td><td class="best-val">29.35</td><td>0.45</td><td>67.81</td></tr>
+            <tr><td style="text-align:left;">OBS-Diff (target)</td><td>28.62</td><td>0.43</td><td>69.90</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (general)</td><td>29.22</td><td class="best-val">0.62</td><td>68.19</td></tr>
+            <tr class="highlight-row"><td style="text-align:left;">Ours (target)</td><td>28.76</td><td>0.51</td><td class="best-val">70.81</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="is-size-7 has-text-centered mt-2 has-text-grey">Best value per sparsity level (or category) in green.</p>
+
+  </div>
+</section>
+
+<!-- ============================ IMPORTANCE SIGNALS (dark band) ============================ -->
+<section class="section band dark-band" id="signals">
+  <div class="container is-max-widescreen">
+    <p class="band-kicker">Application &middot; Flexible importance guidance</p>
+    <h2 class="title is-3 has-text-white has-text-centered">Bias Pruning Toward What <em>You</em> Care About</h2>
+    <p class="band-lead">
+      The pruning formulation never changes. The only input you choose is the importance map $A_t$, which says
+      <em>where reconstruction errors should cost more</em>. Changing the signal behind $A_t$ changes what the
+      pruned model preserves: prompt content, whole objects, or fine structure.
+    </p>
+
+    <!-- What we actually do -->
+    <!-- <ol class="band-flow">
+      <li><span>1</span><div><b>Generate calibration samples</b> with the dense model (1,000 GCC3M prompts).</div></li>
+      <li><span>2</span><div><b>Build one importance map per sample</b> from the chosen signal, then normalize it to $[0,1]$.</div></li>
+      <li><span>3</span><div><b>Re-weight the activations</b> by $A_t$, accumulate $H_{\text{imp}}$, and prune with standard OBS.</div></li>
+    </ol> -->
+
+    <!-- Signal selector -->
+    <div class="signal-picker" role="tablist" aria-label="Importance signal">
+      <button class="sig-btn is-active" data-sig="cfg" role="tab">
+        <span class="sig-name">CFG map</span>
+        <span class="sig-how">$|\epsilon_\theta(x_t,t,y)-\epsilon_\theta(x_t,t,\varnothing)|$, channel-averaged</span>
+        <span class="sig-keeps"><i class="fas fa-bullseye"></i> Keeps prompt-relevant content</span>
+      </button>
+      <button class="sig-btn" data-sig="det" role="tab">
+        <span class="sig-name">Object-local CFG</span>
+        <span class="sig-how">Detect objects with YOLOv8 and keep the CFG map only inside the detected regions</span>
+        <span class="sig-keeps"><i class="fas fa-cube"></i> Keeps whole object structure</span>
+      </button>
+      <button class="sig-btn" data-sig="canny" role="tab">
+        <span class="sig-name">Canny edges</span>
+        <span class="sig-how">Edge map of the calibration image, no CFG required</span>
+        <span class="sig-keeps"><i class="fas fa-draw-polygon"></i> Keeps fine structure &amp; boundaries</span>
+      </button>
+    </div>
+
+    <!-- Viewer -->
+    <div class="signal-viewer">
+      <div class="sv-grid">
+        <figure><img id="svDense" alt="Dense"><figcaption>Dense</figcaption></figure>
+        <figure><img id="svMap" alt="Importance map" class="pixelated"><figcaption id="svMapCap">Importance map</figcaption></figure>
+        <figure><img id="svObs" alt="OBS-Diff"><figcaption>OBS-Diff</figcaption></figure>
+        <figure class="sv-ours"><img id="svOurs" alt="Ours"><figcaption id="svOursCap">Ours</figcaption></figure>
+      </div>
+      <p class="sv-prompt" id="svPrompt"></p>
+      <div class="sv-insight">
+        <p id="svInsight"></p>
+        <div class="sv-metrics" id="svMetrics"></div>
+      </div>
+    </div>
+
+    <p class="band-foot">
+      Takeaway: the importance signal is a <b>plug-in</b>. Canny makes the method usable when CFG maps are unavailable
+      or inconvenient to extract, and adding a detector steers pruning toward object-centric preservation. Every
+      variant beats OBS-Diff on PixArt-&Sigma; at all tested sparsities (<a href="#perf" class="band-link" data-open-tab="sig">Other Signals</a> tab above).
+    </p>
+  </div>
+</section>
+
+<!-- ============================ GALLERY ============================ -->
+<section class="section band band-fade">
+  <div class="container is-max-widescreen">
+    <div class="section-card">
+      <div class="columns is-vcentered">
+        <div class="column is-8">
+          <h2 class="title is-3">Gallery</h2>
+          <p class="subtitle is-5">
+            Outputs of our pruned models at their highest tested sparsity.
+            <strong>Click any image</strong> to compare against OBS-Diff at every sparsity level. The last row shows
+            <strong>category-targeted pruning</strong>, where calibration uses only prompts that contain a chosen category.
+          </p>
+        </div>
+      </div>
+      <!-- Filled by main.js from the GALLERY data -->
+      <div class="gallery-grid" id="galleryGrid"></div>
+    </div>
+  </div>
+</section>
+
+<div id="gallery-modal" class="gallery-modal" aria-hidden="true">
+  <div class="gallery-modal__content">
+    <button class="gallery-modal__close" aria-label="Close">&times;</button>
+    <p class="gallery-modal__meta"></p>
+    <p class="gallery-modal__prompt"></p>
+    <div class="gallery-modal__grid"></div>
+  </div>
+</div>
+
+<!-- ============================ BIBTEX ============================ -->
+<section class="section band band-white" id="BibTeX">
+  <div class="container is-max-widescreen content">
+    <h2 class="title">BibTeX</h2>
+    <pre><code>@inproceedings{lam2026importance,
+  title     = {Importance-Aware OBS Pruning for Diffusion Models},
+  author    = {Lam, Ba-Thinh and Das, Srijan and Le, Hieu},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2026},
+  eprint    = {2607.20048},
+  archivePrefix = {arXiv}
+}</code></pre>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container is-max-desktop has-text-centered">
+    <p class="is-size-7 has-text-grey">
+      We compare against <a href="https://openreview.net/forum?id=eYdPMpW5os" target="_blank" rel="noopener">OBS-Diff</a> (Zhu et al., ICLR 2026).
+      Page layout inspired by <a href="https://pixeldit.github.io/" target="_blank" rel="noopener">PixelDiT</a> and <a href="https://nerfies.github.io/" target="_blank" rel="noopener">Nerfies</a>.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
