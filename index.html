@@ -144,7 +144,7 @@
       </p>
     </div>
 
-    <h2 class="title is-3 has-text-centered method-title">Method: Importance-Aware Hessian</h2>
+    <h2 class="title is-3 has-text-centered method-title">Method: Importance-Aware OBS Pruning</h2>
     <div class="content has-text-justified method-intro">
       <p>
         OBS ranks each weight by its saliency $S_q = w_q^2 / 2[H^{-1}]_{qq}$, with the Hessian $H$ built from layer
@@ -168,7 +168,7 @@
       <div class="column is-4">
         <div class="box-fancy step-card">
           <span class="step-num">2</span>
-          <h3 class="title is-5">Weight the reconstruction error</h3>
+          <h3 class="title is-5">Mask the reconstruction error</h3>
           <p>Errors in important regions count more:</p>
           <p class="eq">$$\min_{\hat W}\sum_t \alpha_t\big\|A_t\odot(\hat W X_t - W X_t)\big\|_2^2$$</p>
           <p class="is-size-7 has-text-grey">Linear layers act on channels, so $A_t$ commutes with $W$.</p>
